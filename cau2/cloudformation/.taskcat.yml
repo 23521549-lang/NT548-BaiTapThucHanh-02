@@ -1,0 +1,52 @@
+# ============================================================
+# .taskcat.yml — cấu hình taskcat test CloudFormation stacks
+# taskcat sẽ deploy từng stack theo thứ tự và kiểm tra
+# ============================================================
+project:
+  name: nt548-cau2
+  regions:
+    - $[taskcat_parameter_region]   # lấy từ parameter override
+
+tests:
+  # Test deploy stack VPC
+  test-vpc:
+    template: templates/vpc.yaml
+    parameters:
+      ProjectName: nt548test
+      Environment: dev
+      VpcCidr: "10.0.0.0/16"
+      PublicSubnetCidr: "10.0.1.0/24"
+      PrivateSubnetCidr: "10.0.2.0/24"
+      AvailabilityZone: $[taskcat_parameter_az]
+
+  # Test deploy stack NAT Gateway (phụ thuộc vpc phải chạy trước)
+  test-nat-gateway:
+    template: templates/nat-gateway.yaml
+    parameters:
+      ProjectName: nt548test
+      Environment: dev
+
+  # Test deploy stack Route Tables
+  test-route-tables:
+    template: templates/route-tables.yaml
+    parameters:
+      ProjectName: nt548test
+      Environment: dev
+
+  # Test deploy stack Security Groups
+  test-security-groups:
+    template: templates/security-groups.yaml
+    parameters:
+      ProjectName: nt548test
+      Environment: dev
+      AllowedSshCidr: "10.0.0.0/8"
+
+  # Test deploy stack EC2
+  test-ec2:
+    template: templates/ec2.yaml
+    parameters:
+      ProjectName: nt548test
+      Environment: dev
+      AmiId: $[taskcat_parameter_ami_id]
+      InstanceType: t2.micro
+      KeyPairName: $[taskcat_parameter_key_pair]

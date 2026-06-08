@@ -1,0 +1,23 @@
+# Copy thành terraform.tfvars và điền giá trị
+# KHÔNG commit file này lên Git
+
+aws_region            = "ap-southeast-1"
+availability_zone     = "ap-southeast-1a"
+project_name          = "nt548"
+environment           = "dev"
+
+# Ubuntu 22.04 LTS tại ap-southeast-1 (Jenkins chạy tốt hơn trên Ubuntu)
+ami_id                = "ami-0df7a207adb9748c7"
+
+# t3.medium: Jenkins + SonarQube cần ít nhất 4GB RAM
+jenkins_instance_type = "t3.medium"
+
+key_pair_name         = "my-key-pair"
+allowed_ssh_cidr      = "0.0.0.0/0"   # Thay bằng IP thực: x.x.x.x/32
+allowed_web_cidr      = "0.0.0.0/0"
+
+vpc_cidr              = "10.1.0.0/16"
+public_subnet_cidr    = "10.1.1.0/24"
+
+dockerhub_username    = "your-dockerhub-username"
+dockerhub_password    = "your-dockerhub-token"

@@ -1,0 +1,104 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "NT548 Cau2 - Stack 1: VPC, Subnets, IGW, Default SG"
+
+Parameters:
+  ProjectName:
+    Type: String
+  Environment:
+    Type: String
+    AllowedValues: [dev, staging, prod]
+    Default: dev
+  VpcCidr:
+    Type: String
+    Default: "10.0.0.0/16"
+  PublicSubnetCidr:
+    Type: String
+    Default: "10.0.1.0/24"
+  PrivateSubnetCidr:
+    Type: String
+    Default: "10.0.2.0/24"
+  AvailabilityZone:
+    Type: AWS::EC2::AvailabilityZone::Name
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-vpc"
+        - Key: Project
+          Value: !Ref ProjectName
+        - Key: Environment
+          Value: !Ref Environment
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PublicSubnetCidr
+      AvailabilityZone: !Ref AvailabilityZone
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-public-subnet"
+        - Key: Tier
+          Value: Public
+
+  PrivateSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: !Ref PrivateSubnetCidr
+      AvailabilityZone: !Ref AvailabilityZone
+      MapPublicIpOnLaunch: false
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-private-subnet"
+        - Key: Tier
+          Value: Private
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-igw"
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  DefaultSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: "Default SG - deny all"
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-default-sg"
+
+Outputs:
+  VpcId:
+    Value: !Ref VPC
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-VpcId"
+  PublicSubnetId:
+    Value: !Ref PublicSubnet
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-PublicSubnetId"
+  PrivateSubnetId:
+    Value: !Ref PrivateSubnet
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-PrivateSubnetId"
+  InternetGatewayId:
+    Value: !Ref InternetGateway
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-InternetGatewayId"

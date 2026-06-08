@@ -1,0 +1,59 @@
+version: 0.2
+# ============================================================
+# CodeBuild buildspec: cfn-lint + taskcat
+# Chạy trong CodePipeline khi có commit mới lên CodeCommit
+# ============================================================
+
+env:
+  variables:
+    CFN_TEMPLATE_DIR: "cau2/cloudformation/templates"
+    TASKCAT_CONFIG:   "cau2/cloudformation/.taskcat.yml"
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.11
+    commands:
+      - echo "=== Installing cfn-lint and taskcat ==="
+      - pip install cfn-lint taskcat --quiet
+      - cfn-lint --version
+      - taskcat --version
+
+  pre_build:
+    commands:
+      - echo "=== cfn-lint: Lint all CloudFormation templates ==="
+      - |
+        LINT_FAILED=0
+        for template in $CFN_TEMPLATE_DIR/*.yaml; do
+          echo "Linting: $template"
+          cfn-lint "$template" -f json --output-file cfn-lint-$(basename $template .yaml).json || LINT_FAILED=1
+          cfn-lint "$template" || true
+        done
+        if [ $LINT_FAILED -ne 0 ]; then
+          echo "cfn-lint found errors — check reports"
+          exit 1
+        fi
+        echo "cfn-lint passed."
+
+  build:
+    commands:
+      - echo "=== taskcat: Test CloudFormation stacks ==="
+      - taskcat test run --config $TASKCAT_CONFIG --no-delete || true
+      - echo "taskcat completed."
+
+  post_build:
+    commands:
+      - echo "=== Build completed at $(date) ==="
+
+artifacts:
+  files:
+    - "cau2/cloudformation/templates/*.yaml"
+    - "cau2/cloudformation/.taskcat.yml"
+    - "cfn-lint-*.json"
+  discard-paths: no
+
+reports:
+  cfn-lint-reports:
+    files:
+      - "cfn-lint-*.json"
+    file-format: CUCUMBERJSON

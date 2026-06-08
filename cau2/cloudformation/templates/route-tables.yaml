@@ -1,0 +1,69 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "NT548 Cau2 - Stack 3: Route Tables"
+
+Parameters:
+  ProjectName:
+    Type: String
+  Environment:
+    Type: String
+    AllowedValues: [dev, staging, prod]
+    Default: dev
+
+Resources:
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-VpcId"
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-public-rt"
+
+  PublicDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      GatewayId: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-InternetGatewayId"
+
+  PublicSubnetAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-PublicSubnetId"
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-VpcId"
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-private-rt"
+
+  PrivateDefaultRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: "0.0.0.0/0"
+      NatGatewayId: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-NatGatewayId"
+
+  PrivateSubnetAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-PrivateSubnetId"
+      RouteTableId: !Ref PrivateRouteTable
+
+Outputs:
+  PublicRouteTableId:
+    Value: !Ref PublicRouteTable
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-PublicRouteTableId"
+  PrivateRouteTableId:
+    Value: !Ref PrivateRouteTable
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-PrivateRouteTableId"

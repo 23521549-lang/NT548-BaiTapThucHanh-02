@@ -1,0 +1,14 @@
+# Copy file này thành terraform.tfvars và điền giá trị
+# KHÔNG commit terraform.tfvars lên Git
+
+aws_region          = "ap-southeast-1"
+availability_zone   = "ap-southeast-1a"
+vpc_cidr            = "10.0.0.0/16"
+public_subnet_cidr  = "10.0.1.0/24"
+private_subnet_cidr = "10.0.2.0/24"
+ami_id              = "ami-0c1907b6d738188e5"
+instance_type       = "t2.micro"
+key_pair_name       = "my-key-pair"
+allowed_ssh_cidr    = "0.0.0.0/0"   # Thay bằng IP thực: x.x.x.x/32
+project_name        = "nt548"
+environment         = "dev"

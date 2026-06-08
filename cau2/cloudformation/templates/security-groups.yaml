@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "NT548 Cau2 - Stack 4: Security Groups"
+
+Parameters:
+  ProjectName:
+    Type: String
+  Environment:
+    Type: String
+    AllowedValues: [dev, staging, prod]
+    Default: dev
+  AllowedSshCidr:
+    Type: String
+    AllowedPattern: "^([0-9]{1,3}\\.){3}[0-9]{1,3}/[0-9]{1,2}$"
+
+Resources:
+  PublicEC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${ProjectName}-${Environment}-public-ec2-sg"
+      GroupDescription: "Allow SSH from specific IP"
+      VpcId: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-VpcId"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref AllowedSshCidr
+          Description: "SSH from allowed IP"
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          FromPort: 0
+          ToPort: 0
+          CidrIp: "0.0.0.0/0"
+          Description: "Allow all outbound"
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-public-ec2-sg"
+
+  PrivateEC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: !Sub "${ProjectName}-${Environment}-private-ec2-sg"
+      GroupDescription: "Allow SSH only from Public EC2 SG"
+      VpcId: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-VpcId"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          SourceSecurityGroupId: !Ref PublicEC2SecurityGroup
+          Description: "SSH from Public EC2 SG"
+        - IpProtocol: icmp
+          FromPort: -1
+          ToPort: -1
+          SourceSecurityGroupId: !Ref PublicEC2SecurityGroup
+          Description: "ICMP from Public EC2 SG"
+      SecurityGroupEgress:
+        - IpProtocol: "-1"
+          FromPort: 0
+          ToPort: 0
+          CidrIp: "0.0.0.0/0"
+          Description: "Allow all outbound via NAT"
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-private-ec2-sg"
+
+Outputs:
+  PublicSgId:
+    Value: !Ref PublicEC2SecurityGroup
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-PublicSgId"
+  PrivateSgId:
+    Value: !Ref PrivateEC2SecurityGroup
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-PrivateSgId"

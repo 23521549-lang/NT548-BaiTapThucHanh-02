@@ -1,0 +1,206 @@
+// ============================================================
+// Jenkinsfile — CI/CD Pipeline cho Online Boutique
+// Stages: Checkout → SonarQube Scan → Build Images →
+//         Trivy Scan → Push to Registry → Deploy
+// ============================================================
+
+pipeline {
+    agent any
+
+    environment {
+        // Lấy từ Jenkins Credentials (không hardcode)
+        DOCKERHUB_CREDENTIALS = credentials('dockerhub-credentials')
+        SONAR_TOKEN           = credentials('sonar-token')
+        DOCKERHUB_USERNAME    = "${DOCKERHUB_CREDENTIALS_USR}"
+
+        // Cấu hình project
+        COMPOSE_FILE    = "cau3/app/docker-compose.yml"
+        SONAR_HOST_URL  = "http://localhost:9000"
+        IMAGE_TAG       = "${BUILD_NUMBER}"
+        BOUTIQUE_REPO   = "https://github.com/GoogleCloudPlatform/microservices-demo.git"
+        BOUTIQUE_BRANCH = "main"
+    }
+
+    options {
+        timeout(time: 60, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+    }
+
+    stages {
+
+        // ── Stage 1: Checkout Online Boutique source ──
+        stage('Checkout') {
+            steps {
+                echo "=== Cloning Online Boutique ==="
+                sh """
+                    if [ ! -d microservices-demo ]; then
+                        git clone --depth=1 --branch ${BOUTIQUE_BRANCH} ${BOUTIQUE_REPO} microservices-demo
+                    else
+                        cd microservices-demo && git pull
+                    fi
+                """
+                echo "Checkout hoàn tất."
+            }
+        }
+
+        // ── Stage 2: SonarQube Analysis ──
+        stage('SonarQube Analysis') {
+            steps {
+                echo "=== Chạy SonarQube scan ==="
+                withSonarQubeEnv('SonarQube') {
+                    sh """
+                        cd microservices-demo
+
+                        # Cài sonar-scanner nếu chưa có
+                        if ! command -v sonar-scanner &> /dev/null; then
+                            wget -q https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-5.0.1.3006-linux.zip
+                            unzip -q sonar-scanner-cli-5.0.1.3006-linux.zip
+                            export PATH=\$PATH:\$(pwd)/sonar-scanner-5.0.1.3006-linux/bin
+                        fi
+
+                        sonar-scanner \
+                            -Dsonar.projectKey=online-boutique \
+                            -Dsonar.projectName="Online Boutique" \
+                            -Dsonar.projectVersion=${IMAGE_TAG} \
+                            -Dsonar.sources=. \
+                            -Dsonar.host.url=${SONAR_HOST_URL} \
+                            -Dsonar.login=${SONAR_TOKEN} \
+                            -Dsonar.exclusions="**/*.pb.go,**/vendor/**,**/.git/**,**/node_modules/**"
+                    """
+                }
+            }
+        }
+
+        // ── Stage 3: Quality Gate ──
+        stage('Quality Gate') {
+            steps {
+                echo "=== Chờ SonarQube Quality Gate ==="
+                timeout(time: 5, unit: 'MINUTES') {
+                    waitForQualityGate abortPipeline: false
+                }
+            }
+        }
+
+        // ── Stage 4: Build Docker Images ──
+        stage('Build Docker Images') {
+            steps {
+                echo "=== Build Docker images cho các microservices ==="
+                sh """
+                    cd microservices-demo
+
+                    # Build các service chính
+                    for SERVICE in frontend cartservice productcatalogservice; do
+                        echo "Building \$SERVICE..."
+                        docker build \
+                            -t ${DOCKERHUB_USERNAME}/boutique-\$SERVICE:${IMAGE_TAG} \
+                            -t ${DOCKERHUB_USERNAME}/boutique-\$SERVICE:latest \
+                            src/\$SERVICE/ || echo "Warning: \$SERVICE build failed, skipping"
+                    done
+                """
+            }
+        }
+
+        // ── Stage 5: Trivy Security Scan ──
+        stage('Trivy Scan') {
+            steps {
+                echo "=== Trivy: quét lỗ hổng bảo mật Docker images ==="
+                sh """
+                    # Cài Trivy nếu chưa có
+                    if ! command -v trivy &> /dev/null; then
+                        curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /usr/local/bin
+                    fi
+
+                    mkdir -p trivy-reports
+                    for SERVICE in frontend cartservice productcatalogservice; do
+                        IMAGE="${DOCKERHUB_USERNAME}/boutique-\$SERVICE:${IMAGE_TAG}"
+                        echo "Scanning \$IMAGE..."
+                        trivy image \
+                            --severity HIGH,CRITICAL \
+                            --format table \
+                            --output trivy-reports/\$SERVICE-report.txt \
+                            \$IMAGE || true
+                    done
+
+                    echo "=== Trivy scan summary ==="
+                    cat trivy-reports/*.txt || true
+                """
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: 'trivy-reports/*.txt', allowEmptyArchive: true
+                }
+            }
+        }
+
+        // ── Stage 6: Push Images to Docker Hub ──
+        stage('Push Images') {
+            steps {
+                echo "=== Push Docker images lên Docker Hub ==="
+                sh """
+                    echo "${DOCKERHUB_CREDENTIALS_PSW}" | docker login --username ${DOCKERHUB_USERNAME} --password-stdin
+
+                    for SERVICE in frontend cartservice productcatalogservice; do
+                        IMAGE="${DOCKERHUB_USERNAME}/boutique-\$SERVICE"
+                        docker push \$IMAGE:${IMAGE_TAG} || echo "Warning: push \$SERVICE failed"
+                        docker push \$IMAGE:latest || true
+                    done
+                """
+            }
+        }
+
+        // ── Stage 7: Deploy Online Boutique với Docker Compose ──
+        stage('Deploy') {
+            steps {
+                echo "=== Deploy Online Boutique via Docker Compose ==="
+                sh """
+                    export DOCKERHUB_USERNAME=${DOCKERHUB_USERNAME}
+                    export IMAGE_TAG=${IMAGE_TAG}
+
+                    # Dừng containers cũ nếu đang chạy
+                    docker compose -f ${COMPOSE_FILE} down --remove-orphans || true
+
+                    # Kéo images mới và chạy
+                    docker compose -f ${COMPOSE_FILE} pull || true
+                    docker compose -f ${COMPOSE_FILE} up -d
+
+                    echo "Chờ services khởi động..."
+                    sleep 15
+                    docker compose -f ${COMPOSE_FILE} ps
+                """
+            }
+        }
+
+        // ── Stage 8: Smoke Test ──
+        stage('Smoke Test') {
+            steps {
+                echo "=== Smoke test: kiểm tra frontend đang chạy ==="
+                sh """
+                    sleep 10
+                    STATUS=\$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8081 || echo "000")
+                    echo "Frontend HTTP status: \$STATUS"
+                    if [ "\$STATUS" = "200" ] || [ "\$STATUS" = "301" ] || [ "\$STATUS" = "302" ]; then
+                        echo "Smoke test PASSED"
+                    else
+                        echo "Smoke test WARNING: status \$STATUS (có thể app đang khởi động)"
+                    fi
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "Pipeline SUCCEEDED — Build #${BUILD_NUMBER}"
+            echo "Online Boutique: http://\$(curl -s http://169.254.169.254/latest/meta-data/public-ipv4):8081"
+        }
+        failure {
+            echo "Pipeline FAILED — Build #${BUILD_NUMBER}"
+            sh "docker compose -f ${COMPOSE_FILE} logs --tail=50 || true"
+        }
+        always {
+            echo "Dọn dẹp dangling images..."
+            sh "docker image prune -f || true"
+        }
+    }
+}

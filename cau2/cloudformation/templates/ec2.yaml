@@ -1,0 +1,94 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "NT548 Cau2 - Stack 5: EC2 Instances"
+
+Parameters:
+  ProjectName:
+    Type: String
+  Environment:
+    Type: String
+    AllowedValues: [dev, staging, prod]
+    Default: dev
+  AmiId:
+    Type: AWS::EC2::Image::Id
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    AllowedValues: [t2.micro, t2.small, t2.medium, t3.micro, t3.small]
+  KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+
+Resources:
+  PublicEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPairName
+      SubnetId: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-PublicSubnetId"
+      SecurityGroupIds:
+        - !ImportValue
+          Fn::Sub: "${ProjectName}-${Environment}-PublicSgId"
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+            DeleteOnTermination: true
+            Encrypted: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          yum install -y curl wget net-tools
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-public-ec2"
+        - Key: Tier
+          Value: Public
+
+  PrivateEC2Instance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyPairName
+      SubnetId: !ImportValue
+        Fn::Sub: "${ProjectName}-${Environment}-PrivateSubnetId"
+      SecurityGroupIds:
+        - !ImportValue
+          Fn::Sub: "${ProjectName}-${Environment}-PrivateSgId"
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+            DeleteOnTermination: true
+            Encrypted: true
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          yum update -y
+          yum install -y curl wget net-tools
+      Tags:
+        - Key: Name
+          Value: !Sub "${ProjectName}-${Environment}-private-ec2"
+        - Key: Tier
+          Value: Private
+
+Outputs:
+  PublicEC2PublicIp:
+    Value: !GetAtt PublicEC2Instance.PublicIp
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-PublicEC2PublicIp"
+  PrivateEC2PrivateIp:
+    Value: !GetAtt PrivateEC2Instance.PrivateIp
+    Export:
+      Name: !Sub "${ProjectName}-${Environment}-PrivateEC2PrivateIp"
+  SshPublicEC2:
+    Value: !Sub "ssh -i ~/.ssh/${KeyPairName}.pem ec2-user@${PublicEC2Instance.PublicIp}"
+  SshPrivateEC2:
+    Value: !Sub
+      - "ssh -i ~/.ssh/${KeyPairName}.pem -J ec2-user@${PubIp} ec2-user@${PrivIp}"
+      - PubIp: !GetAtt PublicEC2Instance.PublicIp
+        PrivIp: !GetAtt PrivateEC2Instance.PrivateIp

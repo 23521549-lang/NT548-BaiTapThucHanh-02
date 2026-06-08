@@ -1,0 +1,172 @@
+# ============================================================
+# docker-compose.yml — Online Boutique (Google Microservices Demo)
+# Tất cả 12 microservices chạy trên Docker
+# Biến DOCKERHUB_USERNAME và IMAGE_TAG được set từ Jenkinsfile
+# ============================================================
+
+version: "3.8"
+
+services:
+
+  # ── Frontend (exposed ra ngoài port 8081) ──
+  frontend:
+    image: ${DOCKERHUB_USERNAME:-gcr.io/google-samples}/boutique-frontend:${IMAGE_TAG:-latest}
+    container_name: boutique-frontend
+    restart: unless-stopped
+    ports:
+      - "8081:8080"
+    environment:
+      - PORT=8080
+      - PRODUCT_CATALOG_SERVICE_ADDR=productcatalogservice:3550
+      - CURRENCY_SERVICE_ADDR=currencyservice:7000
+      - CART_SERVICE_ADDR=cartservice:7070
+      - RECOMMENDATION_SERVICE_ADDR=recommendationservice:8080
+      - SHIPPING_SERVICE_ADDR=shippingservice:50051
+      - CHECKOUT_SERVICE_ADDR=checkoutservice:5050
+      - AD_SERVICE_ADDR=adservice:9555
+      - ENABLE_PROFILER=0
+      - SHOPPING_ASSISTANT_SERVICE_ADDR=
+    depends_on:
+      - productcatalogservice
+      - currencyservice
+      - cartservice
+      - recommendationservice
+      - shippingservice
+      - checkoutservice
+      - adservice
+
+  # ── Product Catalog Service ──
+  productcatalogservice:
+    image: gcr.io/google-samples/microservices-demo/productcatalogservice:v0.10.0
+    container_name: boutique-productcatalog
+    restart: unless-stopped
+    environment:
+      - PORT=3550
+    expose:
+      - "3550"
+
+  # ── Currency Service ──
+  currencyservice:
+    image: gcr.io/google-samples/microservices-demo/currencyservice:v0.10.0
+    container_name: boutique-currency
+    restart: unless-stopped
+    environment:
+      - PORT=7000
+      - DISABLE_PROFILER=1
+    expose:
+      - "7000"
+
+  # ── Cart Service (dùng Redis) ──
+  cartservice:
+    image: gcr.io/google-samples/microservices-demo/cartservice:v0.10.0
+    container_name: boutique-cart
+    restart: unless-stopped
+    environment:
+      - REDIS_ADDR=redis-cart:6379
+    expose:
+      - "7070"
+    depends_on:
+      - redis-cart
+
+  # ── Redis cho Cart Service ──
+  redis-cart:
+    image: redis:7-alpine
+    container_name: boutique-redis
+    restart: unless-stopped
+    expose:
+      - "6379"
+    volumes:
+      - redis_data:/data
+
+  # ── Recommendation Service ──
+  recommendationservice:
+    image: gcr.io/google-samples/microservices-demo/recommendationservice:v0.10.0
+    container_name: boutique-recommendation
+    restart: unless-stopped
+    environment:
+      - PORT=8080
+      - PRODUCT_CATALOG_SERVICE_ADDR=productcatalogservice:3550
+      - DISABLE_PROFILER=1
+    expose:
+      - "8080"
+    depends_on:
+      - productcatalogservice
+
+  # ── Checkout Service ──
+  checkoutservice:
+    image: gcr.io/google-samples/microservices-demo/checkoutservice:v0.10.0
+    container_name: boutique-checkout
+    restart: unless-stopped
+    environment:
+      - PORT=5050
+      - PRODUCT_CATALOG_SERVICE_ADDR=productcatalogservice:3550
+      - SHIPPING_SERVICE_ADDR=shippingservice:50051
+      - PAYMENT_SERVICE_ADDR=paymentservice:50051
+      - EMAIL_SERVICE_ADDR=emailservice:5000
+      - CURRENCY_SERVICE_ADDR=currencyservice:7000
+      - CART_SERVICE_ADDR=cartservice:7070
+    expose:
+      - "5050"
+    depends_on:
+      - productcatalogservice
+      - shippingservice
+      - paymentservice
+      - emailservice
+      - currencyservice
+      - cartservice
+
+  # ── Shipping Service ──
+  shippingservice:
+    image: gcr.io/google-samples/microservices-demo/shippingservice:v0.10.0
+    container_name: boutique-shipping
+    restart: unless-stopped
+    environment:
+      - PORT=50051
+    expose:
+      - "50051"
+
+  # ── Payment Service ──
+  paymentservice:
+    image: gcr.io/google-samples/microservices-demo/paymentservice:v0.10.0
+    container_name: boutique-payment
+    restart: unless-stopped
+    environment:
+      - PORT=50051
+      - DISABLE_PROFILER=1
+    expose:
+      - "50051"
+
+  # ── Email Service ──
+  emailservice:
+    image: gcr.io/google-samples/microservices-demo/emailservice:v0.10.0
+    container_name: boutique-email
+    restart: unless-stopped
+    environment:
+      - PORT=5000
+      - DISABLE_PROFILER=1
+    expose:
+      - "5000"
+
+  # ── Ad Service ──
+  adservice:
+    image: gcr.io/google-samples/microservices-demo/adservice:v0.10.0
+    container_name: boutique-adservice
+    restart: unless-stopped
+    environment:
+      - PORT=9555
+    expose:
+      - "9555"
+
+  # ── Load Generator (tuỳ chọn, tạo traffic giả để demo) ──
+  loadgenerator:
+    image: gcr.io/google-samples/microservices-demo/loadgenerator:v0.10.0
+    container_name: boutique-loadgen
+    restart: unless-stopped
+    environment:
+      - FRONTEND_ADDR=frontend:8080
+      - USERS=5
+    depends_on:
+      - frontend
+
+volumes:
+  redis_data:
