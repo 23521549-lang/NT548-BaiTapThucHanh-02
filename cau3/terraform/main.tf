@@ -136,6 +136,7 @@ resource "aws_instance" "jenkins" {
     dockerhub_username = var.dockerhub_username
     dockerhub_password = var.dockerhub_password
     project_name       = var.project_name
+    COMPOSE_VERSION    = "2.27.0"
   }))
 
   tags = { Name = "${local.name_prefix}-jenkins-server" }
