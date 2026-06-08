@@ -1,0 +1,20 @@
+# Copy thành terraform.tfvars và điền giá trị
+# KHÔNG commit file này lên Git
+
+aws_region           = "ap-southeast-1"
+project_name         = "nt548"
+environment          = "dev"
+
+codecommit_repo_name = "nt548-cau2-infra"
+codecommit_branch    = "main"
+
+# Tham số truyền vào các CFN stacks khi deploy
+cfn_project_name        = "nt548"
+cfn_environment         = "dev"
+cfn_availability_zone   = "ap-southeast-1a"
+cfn_ami_id              = "ami-0c1907b6d738188e5"
+cfn_key_pair_name       = "my-key-pair"
+cfn_allowed_ssh_cidr    = "0.0.0.0/0"   # Thay bằng IP thực: x.x.x.x/32
+cfn_vpc_cidr            = "10.0.0.0/16"
+cfn_public_subnet_cidr  = "10.0.1.0/24"
+cfn_private_subnet_cidr = "10.0.2.0/24"
